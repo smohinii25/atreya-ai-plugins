@@ -1,29 +1,42 @@
-# Business Requirements Document
+---
+module: <module-id>
+doc: BRD
+status: Draft
+date: <YYYY-MM-DD>
+reviewer: TBD
+commits:
+  Ashoka-World-Backend: <hash>
+  Nadi-Tarangini-Frontend: <hash>
+  Nadi-Tarangini-App: <hash>
+---
+# <Module name>: Business Requirements Document
 
-## Document Information
+## 1. Purpose & overview
 
-## Background
+## 2. Business objectives
 
-## Business Objectives
+## 3. Stakeholders & user roles
 
-## Scope
+## 4. Scope
 
-### In Scope
+### In scope
 
-### Out of Scope
+### Out of scope
 
-## Stakeholders
+## 5. Current business process (as-is)
 
-## Business Requirements
+## 6. Business rules
 
-## Assumptions
+## 7. Business requirements
 
-## Constraints
+## 8. Availability by environment
 
-## Dependencies
+## 9. Dependencies & external systems
 
-## Risks
+## 10. Assumptions & constraints
 
-## Success Metrics
+## 11. Success measures (TO CONFIRM)
 
-## Approval
+## 12. Needs confirmation
+
+## 13. Document control

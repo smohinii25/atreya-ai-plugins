@@ -1,27 +1,42 @@
-# Product Requirements Document
+---
+module: <module-id>
+doc: PRD
+status: Draft
+date: <YYYY-MM-DD>
+reviewer: TBD
+commits:
+  Ashoka-World-Backend: <hash>
+  Nadi-Tarangini-Frontend: <hash>
+  Nadi-Tarangini-App: <hash>
+---
+# <Module name>: Product Requirements Document
 
-## Overview
+## 1. Overview
 
-## Problem Statement
+## 2. Users, roles & permissions
 
-## Goals
+## 3. User journeys
 
-## Non-Goals
+## 4. Functional requirements
 
-## Users and Personas
+## 5. Screens (web / mobile)
 
-## User Stories
+## 6. APIs
 
-## Functional Requirements
+## 7. Data model
 
-## Non-Functional Requirements
+## 8. Validations & error handling
 
-## UX and Design
+## 9. Non-functional
 
-## APIs and Data
+## 10. Environment matrix
 
-## Acceptance Criteria
+## 11. Staging delta
 
-## Release Plan
+## 12. External integrations
 
-## Open Questions
+## 13. Open questions
+
+## 14. Diagrams
+
+## 15. Document control

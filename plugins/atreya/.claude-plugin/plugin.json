@@ -9,7 +9,13 @@
   },
   "repository": "https://github.com/smohinii25/atreya-ai-plugins",
   "license": "UNLICENSED",
-  "keywords": ["atreya", "qa", "docs", "safety", "zoho-sprints"],
+  "keywords": [
+    "atreya",
+    "qa",
+    "docs",
+    "safety",
+    "zoho-sprints"
+  ],
   "userConfig": {
     "workspace_root": {
       "type": "directory",

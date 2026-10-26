@@ -100,11 +100,18 @@ CWD=$(abspath "$CWD" /)
 # ---------------------------------------------------------------- rule a: secrets
 # WHY: these files hold credentials/keys (and several are committed to git), so
 # their contents must never enter Claude's context. .env.example is a template.
+# flavor_config.dart holds Razorpay keys next to the app's baseUrl; only the
+# plugin's tested extractor (scripts/extract-baseurl.sh) reads it, and it prints
+# nothing but redacted baseUrl values.
+# Keep this list identical to ATREYA_SECRET_NAMES in scripts/lib/common.sh
+# (tests/scripts-tests.sh checks that).
 is_secret_name() {
   local n; n=$(lower "${1##*/}")
   case "$n" in
     .env.example) return 1 ;;
-    .env|.env.*|*.jks|*.keystore|firebase-*.json|google-services.json|googleservice-info.plist|gchat_logger.dart) return 0 ;;
+    .env|.env.*|*.jks|*.keystore|firebase-*.json|google-services.json|googleservice-info.plist|gchat_logger.dart|flavor_config.dart) return 0 ;;
+    # Found by the 2026-10-26 secret scan: live Razorpay credentials in code.
+    samvitpaymentbridgecontroller.php) return 0 ;;
   esac
   return 1
 }
@@ -114,7 +121,7 @@ is_secret_name() {
 text_names_secret() {
   local t; t=$(lower "$1" | sed 's/\.env\.example//g')
   case "$t" in
-    *.env*|*.jks*|*.keystore*|*firebase-*|*google-services*|*googleservice-info*|*gchat_logger*) return 0 ;;
+    *.env*|*.jks*|*.keystore*|*firebase-*|*google-services*|*googleservice-info*|*gchat_logger*|*flavor_config*|*samvitpaymentbridgecontroller*) return 0 ;;
   esac
   return 1
 }
@@ -136,7 +143,8 @@ secret_under() {
   find "$1" -name .git -prune -o \( -type f -o -type l \) \( \
       -iname .env -o -iname '.env.*' -o -iname '*.jks' -o -iname '*.keystore' \
       -o -iname 'firebase-*.json' -o -iname google-services.json \
-      -o -iname GoogleService-Info.plist -o -iname gchat_logger.dart \) \
+      -o -iname GoogleService-Info.plist -o -iname gchat_logger.dart \
+      -o -iname flavor_config.dart -o -iname SamvitPaymentBridgeController.php \) \
       ! -iname .env.example -print 2>/dev/null | head -n 1
 }
 
@@ -236,7 +244,8 @@ secret_list() {
   find "$1" -name .git -prune -o \( -type f -o -type l \) \( \
       -iname .env -o -iname '.env.*' -o -iname '*.jks' -o -iname '*.keystore' \
       -o -iname 'firebase-*.json' -o -iname google-services.json \
-      -o -iname GoogleService-Info.plist -o -iname gchat_logger.dart \) \
+      -o -iname GoogleService-Info.plist -o -iname gchat_logger.dart \
+      -o -iname flavor_config.dart -o -iname SamvitPaymentBridgeController.php \) \
       ! -iname .env.example -print 2>/dev/null
 }
 # type_globs TYPE -> ripgrep type as globs; unknown type prints "*" (fail-closed:
@@ -285,7 +294,7 @@ handle_file_tool() {  # Read / Edit / Write / MultiEdit / NotebookEdit
   local fp p; fp=$(jget .tool_input.file_path); [ -n "$fp" ] || fp=$(jget .tool_input.notebook_path)
   [ -n "$fp" ] || block parse "$TOOL call without a file path."
   p=$(abspath "$fp" "$CWD")
-  is_secret_name "$p" && block secret "$p is a secret file (.env/.jks/keystore/firebase/google-services/gchat_logger)."
+  is_secret_name "$p" && block secret "$p is a secret file (.env/.jks/keystore/firebase/google-services/gchat_logger/flavor_config)."
   case "$TOOL" in
     Read) pass ;;
     *) check_write "$p" ""; pass ;;   # rule b + rule s
@@ -362,9 +371,15 @@ AWK_TOK='
 function flush() { if (inw) { gsub(/\n/, " ", w); print w; w = ""; inw = 0 } }
 function sep() { flush(); print "@@SEP@@" }
 # grab a $( ... ) body starting at i (just after "$("); returns end index
-function grab_sub(i,   d, c, body) {
+function grab_sub(i,   d, c, body, j) {
   d = 1; body = ""
   while (i <= n) { c = substr(s, i, 1)
+    # quoted text inside $( ... ) may contain parentheses: copy it whole
+    if (c == "\047") { j = index(substr(s, i + 1), "\047"); if (j == 0) break; body = body substr(s, i, j + 1); i += j + 1; continue }
+    if (c == "\"") { j = i + 1
+      while (j <= n && substr(s, j, 1) != "\"") { if (substr(s, j, 1) == "\\") j++; j++ }
+      if (j > n) break; body = body substr(s, i, j - i + 1); i = j + 1; continue }
+    if (c == "\\") { body = body substr(s, i, 2); i += 2; continue }
     if (c == "(") d++
     if (c == ")") { d--; if (d == 0) break }
     body = body c; i++ }
@@ -977,7 +992,7 @@ handle_bash() {
   # REV:path, @file) that is a secret file name blocks.
   local SEPCH=$' \t\n;|&<>()`"\'=:@,{}'
   while IFS= read -r t; do
-    [ -n "$t" ] && is_secret_name "$t" && block secret "command references secret file '$t' (.env/.jks/keystore/firebase-*.json/google-services/GoogleService-Info.plist/gchat_logger.dart). .env.example is fine."
+    [ -n "$t" ] && is_secret_name "$t" && block secret "command references secret file '$t' (.env/.jks/keystore/firebase-*.json/google-services/GoogleService-Info.plist/gchat_logger.dart/flavor_config.dart). .env.example is fine."
   done <<EOF
 $(printf '%s' "$CMD" | tr -s "$SEPCH" '\n')
 EOF

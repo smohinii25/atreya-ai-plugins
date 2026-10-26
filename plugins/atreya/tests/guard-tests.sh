@@ -27,6 +27,7 @@ mkrepo() {  # mkrepo NAME BRANCH
   echo '{}' > "$d/config/firebase-key.json"; echo '{}' > "$d/config/google-services.json"
   echo 'k' > "$d/key/release.jks"; echo 'k' > "$d/ios/GoogleService-Info.plist"
   echo '// a' > "$d/lib/a.dart"; echo '// secret' > "$d/lib/api/gchat_logger.dart"
+  mkdir -p "$d/lib/utilities"; echo 'baseUrl = "https://staging-api.example.test";' > "$d/lib/utilities/flavor_config.dart"
   ( cd "$d" && git init -q -b master && git add -A \
       && git -c user.name=t -c user.email=t@t commit -q -m init \
       && { [ "$2" = master ] || git checkout -q -b "$2"; } )
@@ -97,6 +98,15 @@ bash_c block "$BE" "find . -name '*.php' | xargs grep foo"
 bash_c block "$BE" "bash -c 'cat .env'"
 bash_c block "$BE" 'echo "$(head -1 .env)"'
 bash_c block "$BE" "git show HEAD:.env"
+file_c block Read "$AP/lib/utilities/flavor_config.dart"
+grep_c block "$AP/lib/utilities/flavor_config.dart" content
+grep_c block "$AP/lib/utilities" content
+bash_c block "$AP" "cat lib/utilities/flavor_config.dart"
+bash_c block "$AP" "grep -n baseUrl lib/utilities/flavor_config.dart"
+glob_c block "**/flavor_config.dart"
+file_c block Read "$BE/app/Http/Controllers/SamvitPaymentBridgeController.php"
+bash_c block "$BE" "cat app/Http/Controllers/SamvitPaymentBridgeController.php"
+bash_c allow "$AP" "bash \"$PLUGIN/scripts/extract-baseurl.sh\" --root \"$W\" app"
 
 # ---------------------------------------------------------------- b. repo writes
 section "b. repo writes (backend=master, app=feature/T1, T1 APPROVED)"
@@ -218,6 +228,8 @@ raw_c block "not JSON" 'hello'
 raw_c block "empty" ''
 raw_c block "no tool_name" '{"tool_input":{}}'
 bash_c block "$W" 'echo "unterminated'
+bash_c allow "$BE" "echo \"routes: \$(grep -c 'Route::post(' routes/web.php)\""
+bash_c block "$BE" "echo \"\$(grep -c 'x(' .env)\""
 bash_c block "$W" "eval rm -rf x"
 
 printf '\n%d passed, %d failed\n' "$PASSN" "$FAILN"

@@ -8,7 +8,20 @@ the `workspace_root` setting.
 ## a. Secret files: never read
 Blocked for Read, Grep, Glob, Bash (and Edit/Write): `.env`, `.env.*`, `*.jks`,
 `*.keystore`, `firebase-*.json`, `google-services.json`,
-`GoogleService-Info.plist`, `gchat_logger.dart`. Only `.env.example` is allowed.
+`GoogleService-Info.plist`, `gchat_logger.dart`, `flavor_config.dart`,
+`SamvitPaymentBridgeController.php` (live Razorpay credentials found by the
+secret scan). Only `.env.example` is allowed.
+- `flavor_config.dart` holds the app's baseUrl next to payment keys. Only one
+  tested script, `scripts/extract-baseurl.sh`, reads it; it prints just the
+  redacted https baseUrl per environment. Claude never reads, cats or greps it.
+- All other plugin scripts read repo files only through `tracked_files`
+  (`scripts/lib/common.sh`), which leaves secret files out.
+- Script output that copies text out of repo files passes the shared redaction
+  filter (`scripts/lib/redact.sh`: Razorpay, AWS, Google, Stripe-style keys,
+  private key blocks, and values assigned to names containing
+  key/secret/token/password). Scripts that write only names, counts and
+  `file:line`, or combine already-redacted `_map` data, do not copy values.
+  Nothing in `atreya-docs/` may contain a key.
 - Many of these files are committed to git, so git commands that print file
   contents (`git show`, `git diff`, `git log -p`, `git grep`) need
   `-- <path>` that leaves out secret files, or a names-only flag
@@ -60,11 +73,27 @@ Claude may never create, edit, move, copy or delete a file named `APPROVED`,
 the plugin's own files, or Claude Code settings files (`.claude/settings*.json`,
 `~/.claude.json`, `~/.claude/plugins/`).
 
+## Docs commands (map, link-apis, prd, brd, diagram, impact, sync)
+- They write only to `atreya-docs/`; `repos/` is only read. Scripts read repo
+  files only through `tracked_files` (no secret files, no untracked files).
+- Three layers keep keys out of docs: script output copied from code passes the
+  redaction filter; `check-doc.sh` fails a doc with a key-like string; the
+  `doc-checker` agent reports any "Secret risk" by line number, never the value.
+- Zoho Sprints is read with **Get** tools only (prd, brd, impact). They never
+  create or change items.
+- impact and sync use only `git log` (names and subjects, never file contents);
+  `impact-facts.sh` refuses a secret file as a seed.
+- Only a human moves a doc from Draft to Reviewed/Approved, approves
+  `modules.yaml`, and fills `environments.md`.
+
 ## Known limits
 - **Grep gap:** the guard finds secret files by name in the searched folder.
   To also have Claude Code itself refuse them, add to `~/.claude/settings.json`:
-  `"permissions": {"deny": ["Read(**/.env)", "Read(**/.env.*)", "Read(**/*.jks)", "Read(**/*.keystore)", "Read(**/firebase-*.json)", "Read(**/google-services.json)", "Read(**/GoogleService-Info.plist)", "Read(**/gchat_logger.dart)"]}`
+  `"permissions": {"deny": ["Read(**/.env)", "Read(**/.env.*)", "Read(**/*.jks)", "Read(**/*.keystore)", "Read(**/firebase-*.json)", "Read(**/google-services.json)", "Read(**/GoogleService-Info.plist)", "Read(**/gchat_logger.dart)", "Read(**/flavor_config.dart)"]}`
   (this also stops `.env.example`, so add only if that is acceptable).
+- Scripts are invisible to the guard: it sees `bash script.sh`, not what the
+  script reads. The plugin's own scripts are tested (tests/scripts-tests.sh) to
+  never output secret-file contents; a script someone writes ad hoc is not.
 - Files written by programs the guard cannot look inside (`npm run build`,
   `flutter build`, `bash script.sh`) are not detected. Inline code
   (`python -c`, `node -e`, `php -r`) is blocked when the current folder is in `repos/`.
