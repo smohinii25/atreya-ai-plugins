@@ -1,0 +1,17 @@
+{
+  "name": "atreya-ai-plugins",
+  "owner": {
+    "name": "Mohini Shewale",
+    "email": "mohini.shewale@atreyainnovations.com"
+  },
+  "metadata": {
+    "description": "Atreya Innovations internal Claude Code plugins"
+  },
+  "plugins": [
+    {
+      "name": "atreya",
+      "source": "./plugins/atreya",
+      "description": "Atreya docs/QA/dev workflow with a fail-closed safety guard: product repos read-only by default, secrets blocked, git read-only, production hosts blocked, Zoho Sprints writes confirmed."
+    }
+  ]
+}

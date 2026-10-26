@@ -1,0 +1,29 @@
+{
+  "description": "Atreya safety guard (fail-closed PreToolUse check on every tool call) and a one-line session banner.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/hooks/banner.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash \"${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

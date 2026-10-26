@@ -1,0 +1,39 @@
+{
+  "name": "atreya",
+  "displayName": "Atreya",
+  "version": "0.1.0",
+  "description": "Atreya docs/QA/dev workflow with a fail-closed safety guard: product repos read-only by default, secrets blocked, git read-only, production hosts blocked, Zoho Sprints writes confirmed.",
+  "author": {
+    "name": "Mohini Shewale",
+    "email": "mohini.shewale@atreyainnovations.com"
+  },
+  "repository": "https://github.com/smohinii25/atreya-ai-plugins",
+  "license": "UNLICENSED",
+  "keywords": ["atreya", "qa", "docs", "safety", "zoho-sprints"],
+  "userConfig": {
+    "workspace_root": {
+      "type": "directory",
+      "title": "Workspace root",
+      "description": "Folder that contains repos/, atreya-docs/ and atreya-qa/. Each teammate sets their own path.",
+      "default": "~/Mohini/atreya-ai",
+      "required": true
+    },
+    "staging_url": {
+      "type": "string",
+      "title": "Staging URL",
+      "description": "Web staging dashboard used for QA runs.",
+      "default": "https://staging-dashboard.naditarangini.com"
+    },
+    "staging_username": {
+      "type": "string",
+      "title": "Staging username",
+      "description": "Login used for QA on staging."
+    },
+    "staging_password": {
+      "type": "string",
+      "title": "Staging password",
+      "description": "Password for the staging login. Stored in the system keychain, never in settings.json.",
+      "sensitive": true
+    }
+  }
+}

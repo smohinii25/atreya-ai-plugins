@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# local Claude Code settings and plugin state
+.claude/settings.local.json
+.claude/*.local.md
+
+# never commit secrets
+.env
+.env.*
+!.env.example
+
+# tooling noise
+node_modules/
+*.log

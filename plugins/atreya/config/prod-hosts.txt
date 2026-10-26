@@ -1,0 +1,9 @@
+# Production hosts. One per line; subdomains are blocked too, sibling hosts
+# (e.g. staging-dashboard.naditarangini.com) are NOT. '#' starts a comment.
+# Never add a parent domain such as naditarangini.com: it would block staging.
+dashboard.naditarangini.com
+api.ashoka.world
+# India production chatbot Lambda (Nadi-Tarangini-Frontend config/services.php 'production')
+xqicwgldpwmx7hj6d5k6rmgzjq0mhnak.lambda-url.ap-south-1.on.aws
+# EU/Germany production chatbot Lambda (config/services.php 'eu')
+qzkzqcfg7i2rw6mvq4wygq6rgm0rclfi.lambda-url.ap-south-1.on.aws
