@@ -10,7 +10,7 @@ add commentary, or offer to run anything.
 
 ---
 
-**atreya v0.1.0** · workspace `${user_config.workspace_root}` · repos read-only
+**atreya v0.2.0** · workspace `${user_config.workspace_root}` · repos read-only
 
 **Docs** – available (write only to `atreya-docs/`; every statement cites code
 or goes to "Needs confirmation")

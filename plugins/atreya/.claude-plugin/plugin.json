@@ -1,7 +1,7 @@
 {
   "name": "atreya",
   "displayName": "Atreya",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Atreya docs/QA/dev workflow with a fail-closed safety guard: product repos read-only by default, secrets blocked, git read-only, production hosts blocked, Zoho Sprints writes confirmed.",
   "author": {
     "name": "Mohini Shewale",

@@ -3,7 +3,7 @@
 Claude Code marketplace for Atreya Innovations. It holds one plugin, **atreya**
 (commands appear as `/atreya:<name>`).
 
-Version 0.1.0 has a fail-closed safety guard, a session banner, `/atreya:help`
+Version 0.2.0 has a fail-closed safety guard, a session banner, `/atreya:help`
 and the docs commands below (changes: [`plugins/atreya/CHANGELOG.md`](plugins/atreya/CHANGELOG.md)). QA and dev commands are planned (listed by
 `/atreya:help`).
 
@@ -123,7 +123,7 @@ Then start a new session (or run `/reload-plugins`).
 Check it: every session starts with a banner such as
 
 ```
-atreya v0.1.0 | workspace ~/Mohini/atreya-ai | repos read-only
+atreya v0.2.0 | workspace ~/Mohini/atreya-ai | repos read-only
 ```
 
 If the path is wrong, the banner says `NOT FOUND`. Run `/atreya:help` to see

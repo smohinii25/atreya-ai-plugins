@@ -1,6 +1,6 @@
 # Changelog (atreya plugin)
 
-## 0.1.0 — impact analysis upgrade (2026-11-03)
+## 0.2.0 — 2026-11-03
 
 `/atreya:impact` is now an end-to-end functional and technical impact analysis.
 The command, its arguments, `impact.md` (same 12 headings) and the
