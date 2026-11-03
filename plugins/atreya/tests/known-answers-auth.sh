@@ -11,7 +11,7 @@ ROOT="${1:-${ATREYA_ROOT:-$HOME/Mohini/atreya-ai}}"
 MAP="$ROOT/atreya-docs/_map"
 FE="$MAP/Nadi-Tarangini-Frontend/api-links.json"
 AP="$MAP/Nadi-Tarangini-App/api-links.json"
-for f in "$FE" "$AP"; do [ -f "$f" ] || { echo "skip: $f not found (run /atreya:map and /atreya:link-apis first)"; exit 0; }; done
+for f in "$FE" "$AP"; do [ -f "$f" ] || { echo "skip: $f not found (run /atreya:map and /atreya:link-apis first, or pass your workspace root: bash $0 /path/to/atreya-ai)"; exit 0; }; done
 PASSN=0; FAILN=0
 # check FILE CALLER ROUTE EXPECTED_PAGES (comma-separated, sorted) — every link
 # with that caller and route must credit exactly these pages

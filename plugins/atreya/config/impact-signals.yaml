@@ -1,0 +1,38 @@
+# impact-signals.yaml: name patterns used by the impact risk rules
+# (references/impact-risk-rules.md). Human-owned; Claude never edits plugin files.
+# Matching is case-insensitive substring matching on names only (table names,
+# route URIs, controller/method names, middleware), so every risk it raises is
+# evidence class "Inferred". Strict YAML subset (references/modules-schema.md).
+version: "1"
+money:
+  tables:                     # a table whose name contains one of these holds money data
+    - "payment"
+    - "transaction"
+    - "invoice"
+    - "refund"
+    - "wallet"
+    - "ledger"
+    - "mandate"
+    - "enach"
+    - "razorpay"
+    - "subscription"
+    - "billing"
+    - "settlement"
+    - "payout"
+  externals:                  # external systems (exact names from _map/*/externals.json)
+    - "Razorpay"
+    - "ENACH"
+  modules: []                 # module ids that move money (optional; add by hand)
+security:
+  words:                      # in a changed route URI, controller@method or middleware
+    - "auth"
+    - "login"
+    - "logout"
+    - "otp"
+    - "password"
+    - "token"
+    - "permission"
+    - "role"
+    - "session"
+    - "signup"
+    - "register"

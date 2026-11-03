@@ -65,11 +65,17 @@ sequence)
     # keep the first occurrence, in order (unique_by would sort)
     def uniq_ordered(f): reduce .[] as $e ([]; if any(.[]; f == ($e | f)) then . else . + [$e] end);
     # the screens behind a call; App calls are traced to a feature folder, so
-    # several screens may share one call: show them as one box, all named
+    # several screens may share one call: show them as one box, all named.
+    # The box cites every screen it names (its file) and, for web pages credited
+    # through page JS, the JS call site that reaches the caller ("; "-separated).
+    def sfile($call; $id): (([$F.screens[] | select(.id == $id) | .file] | first) // ([$scr[0][] | select(.repo == $call.client) | .screens[] | select(.id == $id) | "\($call.client):\(.file)"] | first));
     def screen_of($call): ($call.pages | map(select(test("^(GET|POST|PUT|PATCH|DELETE|ANY) ") | not))) as $ps |
-      if ($ps | length) == 0 then null else (([$F.screens[] | select(.id == $ps[0])] | first) // ([$scr[0][] | select(.repo == $call.client) | .screens[] | select(.id == $ps[0]) | {file: "\($call.client):\(.file)"}] | first)) as $s |
+      if ($ps | length) == 0 then null else
+        ([$ps[] | sfile($call; .) // empty] + ($call.screen_files // []) + ($call.page_via // []) | unique) as $cite |
         {id: "scr-\($ps | join("-") | slug)", label: (if ($ps | length) == 1 then $ps[0] else "\($ps | length) screens" end),
-         sub: (if ($ps | length) == 1 then null else ($ps | join(", ")) end), type: "screen", source: ($s.file // "")} end;
+         sub: (if ($ps | length) == 1 then null else ($ps | join(", ")) end), type: "screen", source: ($cite | join("; "))} end;
+    # what links a screen to its caller: the page JS call site(s), else the call itself
+    def via($call): if (($call.page_via // []) | length) > 0 then ($call.page_via | join("; ")) else $call.source end;
     # tables per route; more than 3 become one "N tables" box naming them all
     def tabs($r): [$calls[] | select(.route == $r.key) | .tables[]] | unique;
     def tnodes($r): tabs($r) as $T | ($msrc[$r.controller | ascii_downcase] // "") as $src |
@@ -86,7 +92,7 @@ sequence)
     ([$R[] as $r |
       ($calls[] | select(.route == $r.key)) as $call |
       (screen_of($call)) as $s |
-      (if $s then [{from: $s.id, to: "cli-\($call.client | slug)-\($call.caller | slug)", label: "uses \($call.caller)", source: $call.source}] else [] end) +
+      (if $s then [{from: $s.id, to: "cli-\($call.client | slug)-\($call.caller | slug)", label: "uses \($call.caller)", source: via($call)}] else [] end) +
       [{from: "cli-\($call.client | slug)-\($call.caller | slug)", to: "rt-\($r.key | slug)", label: "\($call.method // "?") \($call.endpoint)", source: $call.source}]
      ] | add // []) as $calledges |
     ([$R[] as $r |
@@ -108,7 +114,8 @@ flow)
     [ "$k" = blade ] && [ "$r" != "$BACKEND" ] && WEBREPO=$r; done
   REPO=$([ "$PLATFORM" = app ] && echo "$APPREPO" || echo "$WEBREPO")
   [ -n "$REPO" ] || die "no $PLATFORM repo mapped"
-  "$JQ" --argjson c "$COMMON" --arg repo "$REPO" --arg plat "$PLATFORM" --arg title "$TITLE" --slurpfile sj "$DOCS/_map/$REPO/screens.json" '
+  "$JQ" --argjson c "$COMMON" --arg repo "$REPO" --arg plat "$PLATFORM" --arg title "$TITLE" --slurpfile sj "$DOCS/_map/$REPO/screens.json" \
+        --slurpfile rj "$([ -f "$DOCS/_map/$REPO/routes.json" ] && echo "$DOCS/_map/$REPO/routes.json" || echo /dev/null)" '
     def slug: ascii_downcase | gsub("[^a-z0-9]+"; "-") | ltrimstr("-") | rtrimstr("-");
     def asset: test("\\.(svg|png|jpe?g|gif|webp|ico|css|js|pdf|json)$"; "i");
     $sj[0].screens as $all |
@@ -119,6 +126,8 @@ flow)
       if $plat == "app" then ([$all[] | select(any(.routes[]?; .path == $l.path))] | first | .id) // null
       else ($l.route // null) as $rk | if $rk then ([$all[] | select(.partial | not) | select((.routes // []) | index($rk))] | first | .id) // null else null end end;
     def tlabel($l): if $plat == "app" then $l.path else ($l.route // $l.url) end;
+    def xsrc($n): (if $plat == "app" then ([$sj[0].go_routes[]? | select(.path == $n.tlabel) | "\($repo):\($sj[0].router):\(.line)"] | first)
+                   else ([$rj[0].routes[]? | select(.key == $n.tlabel) | "\($repo):\(.file):\(.line)"] | first) end) // "\($repo):\($n.file):\($n.line)";
     ([$mine[] | . as $s | ($s.links_to // [])[] | select((.url // "") | asset | not) | select(.path != null or .route != null or .url != null) |
        target(.) as $t | {from: ("s-" + ($s.id | slug)), tid: $t, tlabel: tlabel(.), line: .line, file: ($s.file | sub("^[^:]+:"; ""))}] +
      # screens built inside another screen (tabs): "contains"
@@ -129,7 +138,7 @@ flow)
                            sub: ((.routes // []) | map(if type == "object" then .path else . end) | join(", ") | if . == "" then null else . end),
                            type: "screen", source: .file}] +
               ([$nav[] | select(.tid == null or (.tid as $t | $mineIds | index($t) | not)) |
-                {id: ("x-" + ((.tid // .tlabel) | slug)), label: (.tid // .tlabel), sub: (if .tid then .tlabel else null end), type: "external", source: ""}] | unique_by(.id))),
+                {id: ("x-" + ((.tid // .tlabel) | slug)), label: (.tid // .tlabel), sub: (if .tid then .tlabel else null end), type: "external", source: xsrc(.)}] | unique_by(.id))),
       edges: ([$nav[] | {from, to: (if .tid != null and (.tid as $t | $mineIds | index($t)) then "s-" + (.tid | slug) else "x-" + ((.tid // .tlabel) | slug) end),
                          label: .tlabel, source: "\($repo):\(.file):\(.line)"}] | unique_by(.from, .to))}' "$FJ"
   ;;

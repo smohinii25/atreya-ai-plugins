@@ -55,9 +55,28 @@ BAD=$("$JQ" -r '[(.links // [])[] | select((.client | type) != "string" or (.sou
 for C in $CLIENTS; do
   CD="$DOCS/_map/$C"
   f_or_null() { [ -f "$1" ] && echo "$1" || echo /dev/null; }
+  # Laravel: controller actions some live (uncommented) code outside routes/
+  # refers to by name, as ->x( ::x( or 'x' / "x" (not route('x') / ->name('x'):
+  # those are route names). A calling action with no web route and no such
+  # reference is dead code (e.g. its routes are commented out; routes/ is left
+  # out because web routes are matched by controller AND name).
+  REFD='[]'
+  if [ "$("$JQ" -r '.kind' "$CD/calls.json")" = laravel ]; then
+    CREPO=$(repo_dir "$C")
+    ACTS=$("$JQ" -r '[.calls[].action // empty] | unique | join(" ")' "$CD/calls.json")
+    if [ -n "$ACTS" ]; then
+      REFD=$(cd "$CREPO" && tracked_files "$CREPO" '*.php' | grep -v '^routes/' | tr '\n' '\0' | xargs -0 awk -v acts="$ACTS" '
+        BEGIN { n = split(acts, a, " "); for (i = 1; i <= n; i++) want[a[i]] = 1 }
+        { l = $0; sub(/^[ \t]+/, "", l); if (l ~ /^(\/\/|#|\*|\/\*)/) next
+          i = index(l, "//"); if (i) l = substr(l, 1, i - 1)
+          s = l; while (match(s, /(->|::)[A-Za-z0-9_]+\(|["\047][A-Za-z0-9_]+["\047]/)) { v = substr(s, RSTART, RLENGTH); pre = substr(s, 1, RSTART - 1); s = substr(s, RSTART + RLENGTH)
+            if (v ~ /^["\047]/ && pre ~ /(route|name)\([ \t]*$/) continue
+            gsub(/^(->|::)|\($|["\047]/, "", v); if (v in want) print v } }' | sort -u | "$JQ" -R -s 'split("\n") | map(select(length > 0))')
+    fi
+  fi
   "$JQ" -n --slurpfile calls "$CD/calls.json" --slurpfile br "$BD/routes.json" --slurpfile bc "$BD/controllers.json" \
      --slurpfile cr "$(f_or_null "$CD/routes.json")" --slurpfile cs "$(f_or_null "$CD/screens.json")" \
-     --slurpfile mods "$TMPD/modules.json" --slurpfile ovf "$TMPD/overrides.json" '
+     --slurpfile mods "$TMPD/modules.json" --slurpfile ovf "$TMPD/overrides.json" --argjson refd "$REFD" '
     def lc: ascii_downcase;
     def segs: ltrimstr("/") | rtrimstr("/") | split("/");
     def param: test("^\\{.*\\}$");
@@ -111,18 +130,22 @@ for C in $CLIENTS; do
          ([$web[] | ($trig[.] // [])[]]) as $t |
          (($views + [$t[].pages[]] + [$web[] | ($formp[.] // [])[]]) | unique) as $pg |
          ([$t[] | select(.unresolved) | {source, reason: .unresolved}] | unique) as $un |
-         {caller: "\(($c.controller // "?") | split("\\") | last)@\($c.action // "?")", web_routes: $web, pages: $pg,
+         (($web | length) == 0 and $c.controller != null and $c.action != null and ($refd | index($c.action) | not)) as $dead |
+         {caller: "\(($c.controller // "?") | split("\\") | last)@\($c.action // "?")", web_routes: $web, pages: $pg, dead: $dead,
+          page_via: ([$t[] | select((.pages | length) > 0) | .source] | unique),
           pages_unresolved: (if ($pg | length) == 0 and ($un | length) == 0 then
-              [{source: $src, reason: (if ($web | length) == 0 then "controller method has no web route" else "no page found that calls \($web | join(", "))" end)}] else $un end),
+              [{source: $src, reason: (if $dead then "dead code: controller method has no web route and no code calls it"
+                                       elif ($web | length) == 0 then "controller method has no web route" else "no page found that calls \($web | join(", "))" end)}] else $un end),
           caller_module: ([$web[] | $modOfClient[.] // empty] | unique | first // null)}
        else
-         {caller: ($c.dart_method // "?"), pages: ($c.screens // []),
+         {caller: ($c.dart_method // "?"), pages: ($c.screens // []), screen_files: ($c.screen_files // []),
           pages_unresolved: [($c.trace_unresolved // [])[] | {source: "\(.file):\(.line)", reason}],
           caller_module: ([($c.screen_files // [])[] | $modOfClient[.] // empty] | unique | first // null)}
        end) as $ctx |
       ov($src) as $o |
       { client: $K.repo, source: $src, method: $c.method, endpoint: $c.path } + backend_fields($m) +
-      { caller: $ctx.caller, caller_module: $ctx.caller_module, web_routes: ($ctx.web_routes // null),
+      { caller: $ctx.caller, caller_module: $ctx.caller_module, web_routes: ($ctx.web_routes // null), dead: ($ctx.dead // false),
+        page_via: ($ctx.page_via // []), screen_files: ($ctx.screen_files // []),
         pages: (if $o then ($o.pages // $ctx.pages) else $ctx.pages end),
         pages_unresolved: (if $o and (($o.pages // []) | length) > 0 then [] else $ctx.pages_unresolved end),
         pages_override: ($o != null) } ] as $links0 |
@@ -139,6 +162,7 @@ for C in $CLIENTS; do
               unresolved: $K.counts.unresolved,
               matched_with_page: ([$links0[] | select(.status == "matched" and (.pages | length) > 0)] | length),
               matched_without_page: ([$links0[] | select(.status == "matched" and (.pages | length) == 0)] | length),
+              dead_callers: ([$links0[] | select(.dead)] | length),
               js_direct_backend: ([$links[] | select(.via == "js")] | length),
               js_no_route: ([$jsc[] | select(.target == "none")] | length),
               overrides_applied: ([$OV[] | select(.source as $s | $known | index($s))] | length),
@@ -153,6 +177,7 @@ for C in $CLIENTS; do
     "# API links: \(.client) → \(.backend)\n",
     "Built from \(.client) `\(.client_commit)` and \(.backend) `\(.backend_commit)` by scripts/link-apis.sh.\n",
     "**\(.counts.calls) calls**: \(.counts.matched) matched (\(.counts.matched_with_page) with a page, \(.counts.matched_without_page) without), \(.counts.method_mismatch) method mismatch, \(.counts.no_route) with no matching route, \(.counts.unresolved) unresolved (URL not static).",
+    (if .counts.dead_callers > 0 then "Calls from dead code (controller method with no web route that no code calls; not counted as calling the backend): \(.counts.dead_callers)." else empty end),
     (if .counts.js_direct_backend > 0 then "Page JS calling the backend directly: \(.counts.js_direct_backend)." else empty end),
     "Pages come from code only (views a call renders, page JS and forms that reach its route, the screen that sends its event); _map/overrides.yaml fixes the rest (\(.counts.overrides_applied) applied, \(.counts.overrides_unused) unused).\n",
     "| Screen / page | Caller | Method + endpoint | Route | Controller@method | Models / tables | Module | Source |", "|---|---|---|---|---|---|---|---|",
@@ -177,7 +202,7 @@ done
 
 # ---- backend view: which routes nobody calls
 CL_FILES=$(for C in $CLIENTS; do printf '%s ' "$DOCS/_map/$C/api-links.json"; done)
-"$JQ" -n --slurpfile br "$BD/routes.json" --slurpfile mods "$TMPD/modules.json" --argjson links "$("$JQ" -s '[.[].links[] | select(.status == "matched") | .route]' $CL_FILES)" \
+"$JQ" -n --slurpfile br "$BD/routes.json" --slurpfile mods "$TMPD/modules.json" --argjson links "$("$JQ" -s '[.[].links[] | select(.status == "matched" and (.dead | not)) | .route]' $CL_FILES)" \
   --argjson per "$("$JQ" -s 'map({client, counts})' $CL_FILES)" '
   $mods[0] as $M |
   # one definition (file:line) = one route: Route::match([get, post]) counts as called if either is
@@ -226,7 +251,7 @@ if [ $UPD = 1 ]; then
 fi
 
 # ---- summary
-"$JQ" -r '(.clients[] | "link-apis: \(.client): \(.counts.calls) calls → \(.counts.matched) matched (\(.counts.matched_with_page) with a page, \(.counts.matched_without_page) without), \(.counts.method_mismatch) method mismatch, \(.counts.no_route) no route, \(.counts.unresolved) unresolved; overrides \(.counts.overrides_applied) applied, \(.counts.overrides_unused) unused"),
+"$JQ" -r '(.clients[] | "link-apis: \(.client): \(.counts.calls) calls → \(.counts.matched) matched (\(.counts.matched_with_page) with a page, \(.counts.matched_without_page) without), \(.counts.method_mismatch) method mismatch, \(.counts.no_route) no route, \(.counts.unresolved) unresolved, \(.counts.dead_callers // 0) from dead code; overrides \(.counts.overrides_applied) applied, \(.counts.overrides_unused) unused"),
   "link-apis: \(.backend): \(.called) of \(.routes) routes called by a screen in this workspace"' "$TMPD/backend.json"
 if [ -n "$MOD" ]; then
   "$JQ" -r --arg m "$MOD" '.modules[] | select(.id == $m) | "module \(.id): \(.called) of \(.routes) backend routes called; not called: \(.not_called | length)"' "$TMPD/backend.json"

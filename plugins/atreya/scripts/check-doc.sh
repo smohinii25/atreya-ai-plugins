@@ -23,6 +23,10 @@ ok()   { echo "PASS  $1"; }
 fail() { echo "FAIL  $1"; [ -n "$2" ] && printf '%s\n' "$2" | grep . | head -20 | sed 's/^/        /'; FAILS=$((FAILS+1)); }
 warn_() { echo "WARN  $1"; [ -n "$2" ] && printf '%s\n' "$2" | grep . | head -20 | sed 's/^/        /'; }
 
+# split_cites: one citation per line (a diagram source may hold several, "; "-separated).
+# A function, not inline: bash 3.2 misparses ")" inside $( ) within a case branch.
+split_cites() { awk '{ n = split($0, a, "; "); for (i = 1; i <= n; i++) print a[i] }'; }
+
 # check_cites "LIST" -> every Repo:path[:lines] in LIST exists and points at code
 # (shared by docs and diagrams)
 check_cites() {
@@ -66,7 +70,7 @@ case "$F" in *.drawio)
   OBJ=$(grep -o '<UserObject [^>]*>' "$F" | grep -v 'id="atreya-\(stamp\|title\)"')
   NOSRC=$(printf '%s\n' "$OBJ" | grep -v 'atreya_type="external"' | grep -E 'atreya_source=""|^[^a]*$' | grep -o 'label="[^"]*"' | head -20)
   [ -z "$NOSRC" ] && ok "every box and arrow has a source ($(printf '%s\n' "$OBJ" | grep -c .) elements)" || fail "every box and arrow has a source" "$NOSRC"
-  check_cites "$(printf '%s\n' "$OBJ" | grep -o 'atreya_source="[^"]*"' | sed 's/^atreya_source="//; s/"$//' | sort -u)"
+  check_cites "$(printf '%s\n' "$OBJ" | grep -o 'atreya_source="[^"]*"' | sed 's/^atreya_source="//; s/"$//' | split_cites | sort -u)"
   SEC=$(secret_scan "$F" | cut -f2,3)
   [ -z "$SEC" ] && ok "no key-like strings" || fail "no key-like strings" "$(printf '%s\n' "$SEC" | sed 's/\t/: /')"
   [ $FAILS = 0 ] && { echo "check-doc: PASS ($F)"; exit 0; } || { echo "check-doc: $FAILS check(s) failed ($F)"; exit 1; }

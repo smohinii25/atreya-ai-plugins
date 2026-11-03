@@ -29,7 +29,9 @@ requirement's API line changed). A spec without `options` (made before they were
 recorded) is regenerated from the default set above.
 
 ## Reading a diagram
-- Every box/arrow has an `atreya_source` (Edit Data in draw.io) = its citation.
+- Every box/arrow has an `atreya_source` (Edit Data in draw.io) = its citation. A box
+  that groups several screens cites each of them (and the page JS that reaches the
+  caller), separated by "; ".
 - App calls are traced to a feature folder, so a sequence may start from a box
   "N screens" naming all screens in that folder.
 - The footer and the `atreya-stamp` object carry module, date and commits;

@@ -66,7 +66,7 @@ LANGS=$(for d in "$ROOT"/repos/*/; do r=${d%/}; r=${r##*/}; tracked_files "$d" '
 
 # ---- assemble
 CLIENT_LINKS=$(for d in "$DOCS"/_map/*/; do [ -f "$d/api-links.json" ] && printf '%s ' "$d/api-links.json"; done)
-[ -n "$CLIENT_LINKS" ] && "$JQ" -s '[.[].links[]]' $CLIENT_LINKS > "$TMPD/links.json" || echo '[]' > "$TMPD/links.json"
+[ -n "$CLIENT_LINKS" ] && "$JQ" -s '[.[].links[] | select(.dead | not)]' $CLIENT_LINKS > "$TMPD/links.json" || echo '[]' > "$TMPD/links.json"
 for d in "$DOCS"/_map/*/; do r=${d%/}; r=${r##*/}; [ "$r" = _modules ] && continue
   "$JQ" -n --arg r "$r" --slurpfile routes "$(f_or_null "$d/routes.json")" --slurpfile scr "$(f_or_null "$d/screens.json")" \
     --slurpfile ext "$(f_or_null "$d/externals.json")" --slurpfile mod "$(f_or_null "$d/models.json")" \
@@ -109,7 +109,8 @@ printf '%s\n' "$LANGS" > "$TMPD/langs.tsv"; printf '%s\n' "$ENVHDR" > "$TMPD/env
       {repo: $s.repo, id: $x.id, file: "\($s.repo):\($s.path)",
        routes: ($x.routes // []), rendered_by: ($x.rendered_by // [] | map("\(.controller | short)@\(.method)")),
        links_to: (($x.links_to // []) + ($x.navigates_to // []))}],
-    api_calls: [$mylinks[] | {client, caller, pages, method, endpoint, status, route, controller, tables, source: "\(.client):\(.source)"}],
+    api_calls: [$mylinks[] | .client as $cl | {client, caller, pages, method, endpoint, status, route, controller, tables, source: "\(.client):\(.source)",
+                page_via: [(.page_via // [])[] | "\($cl):\(.)"], screen_files: [(.screen_files // [])[] | "\($cl):\(.)"]}],
     # tables used only through DB::table() have no model/migration: keep them, columns unknown
     tables: [$m.tables[] as $t | ([($D[$backend].models.tables // [])[] | select(.name == $t)] | first) as $x |
       if $x then ($x | {name, models: (.models | map(short)), columns: (if (.columns | length) == 0 then null else .columns end), migrations: (.migrations | length)})
