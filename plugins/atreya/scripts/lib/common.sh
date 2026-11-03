@@ -81,5 +81,29 @@ tracked_files() {
   git -C "$repo" ls-files -- "$@" | awk "$ATREYA_SECRET_FILTER"
 }
 
+# cite_problem CITE -> prints why "Repo:path[:lines]" is not a valid citation
+# (nothing when it is): repo under <root>/repos, tracked, not secret, lines
+# (a,b-c) inside the file, first line of each part not blank. Same rules as
+# check-doc.sh; used by impact-render.sh / impact-check.sh for "Verified".
+cite_problem() {
+  local c="$1" repo rest path lines n part a b t
+  repo=${c%%:*}; rest=${c#*:}
+  { [ "$repo" != "$c" ] && [ -n "$repo" ] && [ -d "$ROOT/repos/$repo" ]; } || { echo "$c (not Repo:path[:line] of a repo under repos/)"; return; }
+  path=${rest%%:*}; lines=""; [ "$rest" != "$path" ] && lines=${rest#*:}
+  case "$path" in ""|/*|*..*) echo "$c (bad path)"; return ;; esac
+  is_secret_name "$path" && { echo "$c (secret file)"; return; }
+  git -C "$ROOT/repos/$repo" ls-files --error-unmatch -- "$path" >/dev/null 2>&1 || { echo "$c (file not tracked)"; return; }
+  [ -n "$lines" ] || return 0
+  n=$(wc -l < "$ROOT/repos/$repo/$path" | tr -d ' ')
+  for part in $(printf '%s' "$lines" | tr ',' ' '); do
+    a=${part%%-*}; b=${part#*-}
+    case "$a$b" in ""|*[!0-9]*) echo "$c (cannot read the line numbers)"; return ;; esac
+    [ "$a" -le "$b" ] || { echo "$c (range $part runs backwards)"; return; }
+    [ "$b" -le "$((n + 1))" ] || { echo "$c (file has $n lines)"; return; }
+    t=$(sed -n "${a}p" "$ROOT/repos/$repo/$path" | tr -d ' \t\r')
+    [ -n "$t" ] || { echo "$c (line $a is blank)"; return; }
+  done
+}
+
 # json_str VALUE -> JSON string literal
 json_str() { printf '%s' "$1" | "$JQ" -Rs .; }

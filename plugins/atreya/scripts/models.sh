@@ -42,8 +42,9 @@ if [ -n "$MIGS" ]; then
     /^[ \t]*(\/\/|\*|#)/ { next }
     /function[ \t]+up[ \t]*\(/ { inup = 1 } /function[ \t]+down[ \t]*\(/ { inup = 0 }
     !inup { next }
-    match($0, /Schema::(create|table)\([ \t]*["\047][A-Za-z0-9_]+["\047]/) {
-      s = substr($0, RSTART, RLENGTH); op = (s ~ /create/) ? "create" : "alter"; sub(/^[^"\047]*["\047]/, "", s); sub(/["\047]$/, "", s)
+    # Schema::create("t" / Schema::table("t", also via Schema::connection("x")->create / ->table
+    match($0, /Schema::(connection\([^)]*\)->)?(create|table)\([ \t]*["\047][A-Za-z0-9_]+["\047]/) {
+      s = substr($0, RSTART, RLENGTH); op = (s ~ /(::|->)create\(/) ? "create" : "alter"; sub(/^.*(create|table)\([ \t]*["\047]/, "", s); sub(/["\047]$/, "", s)
       t = s; printf "T\t%s\t%s\t%s\n", t, FILENAME, op }
     t != "" && match($0, /\$table->[A-Za-z]+\([ \t]*["\047][A-Za-z0-9_]+["\047]/) {
       s = substr($0, RSTART, RLENGTH); ty = s; sub(/^\$table->/, "", ty); sub(/\(.*/, "", ty)

@@ -20,6 +20,27 @@ every seed it gives is justified by the code it cites. A claim about a Zoho
 Sprints item cannot be checked by you: list it as Not provable only if the doc
 gives no `Zoho Sprints <id>` source.
 
+## Impact analyses (impact.md + impact-facts.json)
+impact.md and impact-report.html are rendered from `dev/<ticket>/impact-facts.json`
+(schema: `references/impact-facts-schema.md`); `impact-check.sh` already proves
+the two reports match the JSON, so check **meaning**, not formatting:
+- Every statement shows an evidence class. For each **Verified** one, open the
+  cited line and confirm it shows the claim; if not, report a Mismatch (and say
+  which class it can honestly have: Inferred, Assumption, Unknown).
+- For **Inferred**, confirm it really follows from what it cites (code, a
+  `facts:<key>` entry, the Zoho item). A guess presented as Inferred is Not provable.
+- Indirect modules: open the cited path (the edge citations in "Why") and confirm
+  each hop: the caller calls that route, the method uses that class, the listener
+  is registered for that event, the method reads/writes that table.
+- "Investigated, not affected": confirm the reason holds (e.g. the table is only
+  read). A module that the cited code shows is affected is a Mismatch.
+- Workflow steps: the actor, screen and route match the code; "before" matches
+  today's code; "after" matches the request (not an invented design).
+- Risks: each level follows its rule in `references/impact-risk-rules.md`; an
+  analysis risk never lowers a script risk.
+- QA: no scenario claims a result (Passed/Failed) without a QA report file.
+- Flag invented modules, dependencies, IDs or test results as Mismatch.
+
 ## Method
 1. Read the doc. List every checkable claim: each requirement and acceptance
    criterion, each table row, each sentence that states a fact, and for a
@@ -54,6 +75,8 @@ Summary: N claims · V verified · M mismatch · P not provable · S secret risk
 | # | Doc line | Claim | What the code shows | Source |
 ## Not provable
 | # | Doc line | Claim | Why | Suggested fix (cite X / move to Needs confirmation) |
+## Evidence class (impact analyses only)
+| # | Doc line | Claim | Class given | Class the evidence supports |
 ## Secret risk
 | # | Doc line | Type |
 ## Verified (sample)

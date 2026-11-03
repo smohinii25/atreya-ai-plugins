@@ -29,6 +29,17 @@ commits on its module's files (a diagram: on the files it cites).
 Diagrams (`.drawio`) carry the same stamp: module, date and commits, as a visible
 footer text and in the file's metadata (see the diagram skill).
 
+## Evidence classes (impact analyses)
+Every statement in an impact analysis carries one class
+(`references/impact-facts-schema.md`): **Verified** (`Repo:path:line` at the
+stamped commit, or the Zoho item's own text), **Inferred** (follows from cited
+facts or a rule), **Assumption** (listed under assumptions, linked to a question),
+**Unknown** (cannot be known statically; says why), **Not affected** (checked;
+says what). Script facts and Claude's analysis are kept apart in
+`impact-facts.json`; the facts carry a hash and are never edited by hand.
+impact.md and impact-report.html are rendered as Draft; a human moves impact.md
+to Reviewed or Approved.
+
 ## Never invent
 - Every statement must be provable from code (cite `repo:path:line`), from the
   Zoho Sprints item, or from a human-owned doc (`environments.md`, glossary…).

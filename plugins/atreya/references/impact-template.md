@@ -12,6 +12,9 @@ commits:
 ---
 # <Short change title>: Impact analysis
 
+<!-- Rendered by scripts/impact-render.sh from impact-facts.json; never written by hand.
+     The ### subsections of each heading are listed in references/impact-guide.md. -->
+
 ## 1. Change
 
 ## 2. Summary

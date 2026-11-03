@@ -17,18 +17,32 @@
 # rows, diagram names), risk signals + suggested level, QA to rerun
 # (references/impact-guide.md). Warns when _map/ is behind a repo's HEAD.
 # Exit 1 on an unknown seed (nothing is written).
+#
+# v2 (schema atreya.impact/2, references/impact-facts-schema.md) adds, from
+# scripts/lib/impact-graph.jq and impact-risk.jq: direct + indirect modules with
+# depth, direction (upstream/downstream) and the cited path, investigated-but-not-
+# affected modules, the dependency graph, changed/affected code, data flow,
+# events, unknowns, conflicts, cycles, rule-based risks with evidence, QA scope,
+# traceability, and "analysis": null (Claude fills it through impact-render.sh).
+# Every v1 key keeps its name and meaning.
+#   --depth N   module hops to trace (1-5, default 3)
+#   --out DIR   write there instead of atreya-docs/dev/SLUG (tests; never repos/)
 . "$(dirname "$0")/lib/common.sh"
 parse_root_arg "$@"
-SLUG=""; FILES=(); ROUTES=(); TABLES=(); SCREENS=(); MODS=()
+SLUG=""; FILES=(); ROUTES=(); TABLES=(); SCREENS=(); MODS=(); DEPTH=3; OUT=""
 set -- "${ARGS[@]}"
 while [ $# -gt 0 ]; do case "$1" in
   --ticket) SLUG="$2"; shift 2 ;; --file) FILES+=("$2"); shift 2 ;; --route) ROUTES+=("$2"); shift 2 ;;
   --table) TABLES+=("$2"); shift 2 ;; --screen) SCREENS+=("$2"); shift 2 ;; --module) MODS+=("$2"); shift 2 ;;
+  --depth) DEPTH="$2"; shift 2 ;; --out) OUT="$2"; shift 2 ;;
   *) die "unknown argument $1" ;; esac; done
-case "$SLUG" in ""|*[!A-Za-z0-9._-]*|.*) die "usage: impact-facts.sh --root R --ticket SLUG [--file Repo:path[:line]] [--route \"METHOD uri\"] [--table T] [--screen Repo:Id] [--module ID]" ;; esac
+case "$SLUG" in ""|*[!A-Za-z0-9._-]*|.*) die "usage: impact-facts.sh --root R --ticket SLUG [--depth N] [--file Repo:path[:line]] [--route \"METHOD uri\"] [--table T] [--screen Repo:Id] [--module ID]" ;; esac
+case "$DEPTH" in [1-5]) ;; *) die "--depth must be 1-5" ;; esac
 [ $(( ${#FILES[@]} + ${#ROUTES[@]} + ${#TABLES[@]} + ${#SCREENS[@]} + ${#MODS[@]} )) -gt 0 ] || die "give at least one seed"
 [ -f "$DOCS/modules.yaml" ] || die "no modules.yaml (run /atreya:map --merge)"
-OUT="$DOCS/dev/$SLUG"
+if [ -z "$OUT" ]; then OUT="$DOCS/dev/$SLUG"
+else mkdir -p "$OUT" && OUT=$(cd "$OUT" && pwd -P) || die "cannot create $OUT"
+  case "$OUT/" in "$ROOT/repos/"*) die "--out may not be under repos/" ;; esac; fi
 TMPD=$(mktemp -d "${TMPDIR:-/tmp}/atreya-impact.XXXXXX") || die "mktemp failed"
 trap 'rm -rf "$TMPD"' EXIT
 
@@ -226,8 +240,29 @@ done
       cites: ([.[].cite] | unique | .[0:8])})
   | $F[0] + {docs: .}' "$TMPD/cites.tsv" > "$TMPD/facts2.json" || die "doc scan failed (bug)"
 
+# ---- v2: indirect dependencies (graph walk), then rule-based risks
+"$JQ" -n --slurpfile Mf "$TMPD/modules.json" --slurpfile Df "$TMPD/data.json" --slurpfile Ff "$TMPD/facts2.json" \
+  --argjson depth "$DEPTH" -f "$ATREYA_LIB/impact-graph.jq" > "$TMPD/facts3.json" || die "dependency trace failed (bug)"
+bash "$ATREYA_SCRIPTS/yaml2json.sh" "$ATREYA_PLUGIN/config/impact-signals.yaml" > "$TMPD/signals.json" || die "config/impact-signals.yaml does not parse"
+"$JQ" --slurpfile Sg "$TMPD/signals.json" -f "$ATREYA_LIB/impact-risk.jq" "$TMPD/facts3.json" > "$TMPD/facts4.json" || die "risk rules failed (bug)"
+# existing automated tests in atreya-qa/ that name a traced requirement ID (file names only, never contents)
+: > "$TMPD/qa.tsv"
+if [ -d "$ROOT/atreya-qa" ]; then
+  for id in $("$JQ" -r '.traceability[].ref' "$TMPD/facts4.json" | sort -u); do
+    grep -rlF --exclude-dir=.git --exclude-dir=node_modules --exclude='.env*' -- "$id" "$ROOT/atreya-qa" 2>/dev/null | sort |
+      while IFS= read -r p; do printf '%s\tatreya-qa/%s\n' "$id" "${p#"$ROOT/atreya-qa/"}"; done >> "$TMPD/qa.tsv"
+  done
+fi
 mkdir -p "$OUT" || die "cannot create $OUT"
-"$JQ" 'del(.errors)' "$TMPD/facts2.json" | redact > "$OUT/impact-facts.json"
+"$JQ" --rawfile qa "$TMPD/qa.tsv" --arg today "$(today)" '
+  del(.errors) |
+  .qa_scope.existing += [$qa | split("\n")[] | select(. != "") | split("\t") | {ref: .[0], kind: "atreya-qa test", source: .[1]}] |
+  # facts from a _map that is behind HEAD are not Verified for the current code
+  (if (.map_behind | length) > 0 then walk(if type == "object" and .class == "Verified" then .class = "Inferred" | .note = "_map is behind HEAD" else . end) else . end) |
+  . + {generated_by: "scripts/impact-facts.sh", analysis: null, review: {status: "Draft", reviewer: "TBD", date: $today}}' "$TMPD/facts4.json" | redact > "$TMPD/facts5.json" \
+  || die "could not finish the facts (bug)"
+SHA=$("$JQ" -S -c 'del(.analysis, .review, .facts_sha256)' "$TMPD/facts5.json" | shasum -a 256 | cut -d' ' -f1)
+"$JQ" --arg h "$SHA" '. + {facts_sha256: $h}' "$TMPD/facts5.json" > "$OUT/impact-facts.json" || die "cannot write $OUT/impact-facts.json"
 "$JQ" -r '
   def l($x): if ($x | length) == 0 then "- none" else ($x[] | "- \(.)") end;
   "# Impact facts: \(.ticket)\n",
@@ -258,5 +293,25 @@ mkdir -p "$OUT" || die "cannot create $OUT"
   "- Regression: \(.qa.regression | join(", ") | if . == "" then "none" else . end)",
   (if (.qa.not_covered | length) == 0 then "- Not covered by QA: none" else "- Not covered by QA:\n" + (.qa.not_covered | map("  - \(.)") | join("\n")) end)
 ' "$OUT/impact-facts.json" | redact > "$OUT/impact-facts.md"
+"$JQ" -r '
+  def l($x): if ($x | length) == 0 then "- none" else ($x[] | "- \(.)") end;
+  "\n## Dependencies (v2, depth limit \(.depth_limit) module hops)",
+  "### Modules",
+  l([.modules[] | "**\(.id)** \(.role)\(if .role == "indirect" then ", depth \(.depth), \(.direction)" else "" end)\(if .critical then " (critical)" else "" end): \(.why | join("; ")) [\(.evidence.class)]"]),
+  "### Investigated, not affected", l([.not_affected[] | "\(.id): \(.reason)"]),
+  "### Changed and affected code",
+  l([.code[] | "\(.role) `\(.cite)` \(.method) (\(.kind))\(if (.writes | length) > 0 then "; writes \([.writes[] | .table] | unique | join(", "))" else "" end)\(if .transaction then "; in a transaction" else "" end)\(if (.uses | length) > 0 then "; uses \([.uses[].class | split("\\") | last] | join(", "))" else "" end)"]),
+  "### Events", l([.events[] | "\(.event | split("\\") | last) emitted at `\(.emitted_at)` → \(if (.listeners | length) == 0 then "no mapped listener" else ([.listeners[] | "\(.class | split("\\") | last) (\(.module // "no module"))"] | join(", ")) end)"]),
+  "### Data flow", l([.data_flow[] | "\(.op) \(.table) at `\(.cite)`\(if (.consumers | length) > 0 then "; also read by \(.consumers | length) module(s)" else "" end)"]),
+  "### Unknowns", l([.unknowns[] | "\(.what): \(.why) (\(.where))"]),
+  "### Conflicting evidence", l([.conflicts[] | "\(.what): \(.effect)"]),
+  "### Cycles", l([.cycles[] | .path | join(" → ")]),
+  "### Beyond the depth limit", l([.truncated[] | "\(.label) (\(.module // "no module"), depth \(.depth))"]),
+  "\n## Risk rules (v2): \(.risk_overall.level), confidence \(.risk_overall.confidence)",
+  l([.risks[] | "\(.id) \(.level) [\(.rule)] \(.reason) [\(.evidence.class)]"]),
+  "\n## Traceability", l([.traceability[] | "\(.ref) (\(.doc))"]),
+  "### Existing QA", l([.qa_scope.existing[] | "\(.ref): \(.kind) (\(.source))"])
+' "$OUT/impact-facts.json" | redact >> "$OUT/impact-facts.md"
 "$JQ" -r '"impact-facts: \(.ticket): \(.direct_modules | length) direct + \(.related_modules | length) related modules, \(.backend_routes | length) backend routes (\([.backend_routes[].callers[]] | length) client callers), \(.web_routes | length) web routes, \(.client_calls | length) API calls from changed client code, \(.tables.changed | length) changed tables, \(.external_systems | length) external uses, \(.docs | length) docs/diagrams cite it; risk \(.risk.level)\(if (.map_behind | length) > 0 then "; WARNING _map behind HEAD for \(.map_behind | length) repo(s)" else "" end)"' "$OUT/impact-facts.json"
+"$JQ" -r '"impact-facts v2: \([.modules[] | select(.role == "indirect")] | length) indirect modules (depth ≤ \(.depth_limit)), \(.not_affected | length) investigated not affected, \(.unknowns | length) unknowns, \(.conflicts | length) conflicts, \(.cycles | length) cycles; overall risk \(.risk_overall.level) (confidence \(.risk_overall.confidence))"' "$OUT/impact-facts.json"
 echo "wrote $OUT/impact-facts.json and impact-facts.md"

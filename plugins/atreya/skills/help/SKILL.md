@@ -20,7 +20,7 @@ or goes to "Needs confirmation")
 - `/atreya:prd <module> [zoho-item]` – draft or update a module's PRD (+ doc-checker report)
 - `/atreya:brd <module> [zoho-item]` – draft or update a module's BRD in plain language
 - `/atreya:diagram <module> [er|flow|sequence|all]` – draw.io diagrams generated from code
-- `/atreya:impact <zoho-item | "free text">` – impact of one change: modules, APIs, screens, docs, risk, QA to rerun
+- `/atreya:impact <zoho-item | "free text">` – impact of one change: direct and indirect modules (upstream/downstream), workflow, data, evidence-based risk, QA scope; `impact.md` + interactive `impact-report.html`
 - `/atreya:sync [module]` – list docs and diagrams that are out of date with the code; refresh the ones you approve
 
 Typical order: `map` each repo → `map --merge` → `link-apis` → `prd` → `brd` →

@@ -20,9 +20,11 @@ atreya-docs/
 │   └── diagrams/<name>.drawio  (+ <name>.spec.json it was generated from)
 ├── _map/_modules/<id>/facts.md|json   fact pack the PRD/BRD are written from
 └── dev/<ticket-id>/            free text without a ticket: dev/adhoc-<slug>/
-    ├── impact.md               /atreya:impact (not tracked by /atreya:sync: one change, one moment)
-    ├── impact-facts.md|json    scripts/impact-facts.sh output it was written from
-    └── checks/impact-check.md  doc-checker report
+    ├── impact-facts.json       single source: script facts (hashed) + Claude's analysis
+    ├── impact-facts.md         the script facts, readable
+    ├── impact.md               /atreya:impact, rendered from the JSON (not tracked by /atreya:sync)
+    ├── impact-report.html      same data as one self-contained interactive page (offline, no external requests)
+    └── checks/impact-check.md  impact-check.sh output + doc-checker report
 ```
 
 Rules

@@ -81,8 +81,24 @@ the plugin's own files, or Claude Code settings files (`.claude/settings*.json`,
   `doc-checker` agent reports any "Secret risk" by line number, never the value.
 - Zoho Sprints is read with **Get** tools only (prd, brd, impact). They never
   create or change items.
-- impact and sync use only `git log` (names and subjects, never file contents);
-  `impact-facts.sh` refuses a secret file as a seed.
+- sync uses only `git log` (names and subjects, never file contents). impact
+  uses `git ls-files` / `rev-parse` (names and hashes) and the `_map/` data;
+  `impact-facts.sh` refuses a secret file as a seed. To prove a "Verified"
+  citation, `impact-render.sh` / `impact-check.sh` read only the cited line of a
+  tracked, non-secret file (the same rule as `check-doc.sh`). impact lists
+  `atreya-qa/` test files that name a requirement ID by file name only (`.env*`
+  skipped, contents never copied).
+- impact keeps script facts and Claude's analysis apart in `impact-facts.json`:
+  the facts carry a hash; render and check refuse edited facts. The analysis is
+  refused (nothing written) if it holds a key-like string (also checked on the
+  decoded JSON text), sets a review status, claims a QA result without a QA
+  report file, or cites as Verified a line that does not exist.
+- `impact-report.html` is one self-contained file: inline CSS/JS only, a CSP of
+  `default-src 'none'` (no network request is possible), every value
+  HTML-escaped, map data embedded as JSON with `<`, `>`, `&` escaped, no
+  `innerHTML`/`eval`. `impact-check.sh` fails the report if its script or style
+  differ from the template, if any external URL, injected tag or inline event
+  handler appears, or if it is not marked Draft.
 - Only a human moves a doc from Draft to Reviewed/Approved, approves
   `modules.yaml`, and fills `environments.md`.
 

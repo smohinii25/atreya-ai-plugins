@@ -1,0 +1,31 @@
+{
+  "input": {"source": "free-text", "title": "Round ledger amounts to 2 decimals", "text": "Ledger entries must be rounded to 2 decimals when posted."},
+  "requirement": {
+    "current": [{"text": "LedgerService@post inserts the amount as given", "evidence": {"class": "Verified", "cites": ["be:app/Services/LedgerService.php:6"]}}],
+    "proposed": [{"text": "Amounts are rounded to 2 decimals before insert", "evidence": {"class": "Inferred", "cites": ["facts:code"]}}],
+    "ambiguities": [{"text": "Round half up or bankers rounding?", "question": "Q1"}],
+    "missing": [{"text": "What happens to existing unrounded rows?", "question": "Q2"}]
+  },
+  "summary": {"headline": "Round ledger amounts when they are posted", "consequences": [
+    {"text": "Payment totals and ledger totals can differ by rounding", "evidence": {"class": "Inferred", "cites": ["facts:data_flow"]}}]},
+  "module_notes": {
+    "ledger": {"description": "Posts and shows ledger entries", "why_affected": "owns LedgerService", "functional_impact": [{"text": "Posted amounts are rounded", "evidence": {"class": "Inferred", "cites": ["facts:code"]}}]},
+    "payments": {"description": "Takes payments", "why_affected": "PayController@pay posts to the ledger", "functional_impact": [{"text": "A payment's ledger entry is rounded", "evidence": {"class": "Verified", "cites": ["be:app/Http/Controllers/PayController.php:12"]}}]}
+  },
+  "workflow": [
+    {"step": 1, "actor": "Customer", "module": "app-pay", "screen": "PayScreen", "route": "POST api/pay", "before": "Pays an amount", "after": "Same", "on_failure": "Payment not taken", "evidence": {"class": "Verified", "cites": ["ap:lib/common_files/api_services/api_repository.dart:3"]}},
+    {"step": 2, "actor": "System", "module": "payments", "route": "POST api/pay", "before": "Ledger gets the raw amount", "after": "Ledger gets the rounded amount", "on_failure": "Payment stored but ledger missing: totals disagree", "evidence": {"class": "Verified", "cites": ["be:app/Http/Controllers/PayController.php:12"]}},
+    {"step": 3, "actor": "System", "module": "receipts", "before": "Receipt sent", "after": "Receipt sent (amount from the event)", "on_failure": "No receipt", "evidence": {"class": "Assumption", "cites": [], "assumption": "A1"}}
+  ],
+  "data_fields": [{"table": "ledger", "field": "x", "change": "rounded to 2 decimals", "calculation": "round(x, 2)", "evidence": {"class": "Inferred", "cites": ["facts:data_flow"]}}],
+  "data_consistency": [{"text": "PayController@pay writes payments and wallets without a transaction", "consequence": "a failure between the writes leaves balances wrong", "evidence": {"class": "Verified", "cites": ["be:app/Http/Controllers/PayController.php:10,11"]}}],
+  "risks": [{"id": "RA-01", "rule": "FAIL-02", "level": "High", "reason": "if posting fails after the payment is stored, totals disagree", "consequence": "finance reconciliation breaks", "modules": ["payments"], "evidence": {"class": "Inferred", "cites": ["facts:code"]}}],
+  "qa_scenarios": [
+    {"id": "QA-01", "module": "shop", "step": 1, "type": "positive", "origin": "suggested", "title": "Checkout 10.005", "expected": "ledger shows 10.01", "trace": [], "status": "Not run"},
+    {"id": "QA-02", "module": "payments", "step": 2, "type": "boundary", "origin": "suggested", "title": "Pay 0.005", "expected": "ledger 0.01 (or 0.00, see Q1)", "trace": [], "status": "Not run"},
+    {"id": "QA-03", "module": "reports", "type": "integration", "origin": "suggested", "title": "Report totals after rounding", "expected": "totals match ledger", "trace": [], "status": "Not run"}
+  ],
+  "open_questions": [{"id": "Q1", "question": "Which rounding rule?", "role": "PO", "blocks": ["QA-02"]}, {"id": "Q2", "question": "Migrate existing rows?", "role": "Dev"}],
+  "assumptions": [{"id": "A1", "text": "Receipts use the amount from the event, not the ledger", "affects": ["step 3"]}],
+  "actions": [{"text": "Decide the rounding rule", "role": "PO"}, {"text": "Wrap pay() writes in a transaction", "role": "Dev"}]
+}

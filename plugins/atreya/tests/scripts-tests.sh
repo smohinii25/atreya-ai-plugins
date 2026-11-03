@@ -528,8 +528,8 @@ expect_eq "Flutter: StringsConst constants (+ dynamic suffix), commented constan
 expect_contains "Flutter: non-baseUrl constant (chatbot) is unresolved" "$(J ap/calls.json '.unresolved | map(.reason) | join(",")')" "chatbotBaseUrl is not a backend baseUrl constant"
 expect_eq "Flutter: 2nd hop (repository method → the line that calls it)" "$(J ap/calls.json '.calls[] | select(.path == "/login") | "\(.dart_method):\(.callers | join(","))"')" "loginUser:lib/login/bloc/login_bloc.dart:2"
 LA=$(bash "$M/link-apis.sh" $RT --module auth --update-not-in-use 2>&1)
-expect_eq "fe summary" "$(printf '%s\n' "$LA" | grep '^link-apis: fe:')" "link-apis: fe: 6 calls → 4 matched (4 with a page, 0 without), 0 method mismatch, 1 no route, 1 unresolved; overrides 0 applied, 0 unused"
-expect_eq "ap summary" "$(printf '%s\n' "$LA" | grep '^link-apis: ap:')" "link-apis: ap: 3 calls → 2 matched (2 with a page, 0 without), 0 method mismatch, 0 no route, 1 unresolved; overrides 0 applied, 0 unused"
+expect_eq "fe summary" "$(printf '%s\n' "$LA" | grep '^link-apis: fe:')" "link-apis: fe: 6 calls → 4 matched (4 with a page, 0 without), 0 method mismatch, 1 no route, 1 unresolved, 0 from dead code; overrides 0 applied, 0 unused"
+expect_eq "ap summary" "$(printf '%s\n' "$LA" | grep '^link-apis: ap:')" "link-apis: ap: 3 calls → 2 matched (2 with a page, 0 without), 0 method mismatch, 0 no route, 1 unresolved, 0 from dead code; overrides 0 applied, 0 unused"
 expect_contains "an empty overrides.yaml is created once" "$LA" "created $W2/atreya-docs/_map/overrides.yaml (empty)"
 expect_eq "matched to the live (non-shadowed) route and controller" "$(J fe/api-links.json '.links[] | select(.endpoint == "/login") | "\(.route)|\(.controller)|\(.module)"')" "POST login|AuthController@loginV2|auth"
 expect_eq "{} matches a {param} route" "$(J fe/api-links.json '.links[] | select(.endpoint == "/report/{}") | .route')" "GET report/{id}"
@@ -1041,6 +1041,82 @@ printf "\$('#adm-btn').click(function () {\n    \$.post('/save-profile');\n});\n
 bash "$M/screens.sh" $RT fe >/dev/null 2>&1
 expect_eq "an included page's own @extends is not followed (its layout JS stays with it)" "$(J fe/screens.json '[.js_calls[] | select(.file == "public/js/admin.js") | .pages[]] | join(",")')" "admin.home"
 expect_absent "the page that includes it gets the included view, not its layout" "$(J fe/screens.json '.screens[] | select(.id == "admin.combo") | .parts | join(",")')" "layouts/admin.blade.php"
+
+# ---------------------------------------------------------------- regressions found by the auth doc-checker
+section "regressions: false tables, connection migrations, dead callers, citations"
+# a model name inside a longer identifier (beginTransaction, getReport) is not that model
+cat > "$B2/app/Http/Controllers/TxController.php" <<'EOF'
+<?php
+namespace App\Http\Controllers;
+use App\Models\Report;
+use App\Models\Transaction;
+class TxController extends Controller
+{
+    public function a() { DB::beginTransaction(); $this->getReport(); return 1; }
+    public function b() { return Report::all(); }
+    public function c() { return Transaction::where('x', 1)->first(); }
+}
+EOF
+cat > "$B2/app/Models/Transaction.php" <<'EOF'
+<?php
+namespace App\Models;
+class Transaction extends Model { protected $table = 'transactions'; }
+EOF
+# migrations through Schema::connection(...)->create / ->table
+cat > "$B2/database/migrations/2024_02_01_000000_alter_users.php" <<'EOF'
+<?php
+return new class extends Migration {
+    public function up() {
+        Schema::connection('mysql')->table('users', function (Blueprint $table) {
+            $table->string('phone')->nullable();
+        });
+        Schema::connection('mysql')->create('created_logs', function (Blueprint $table) {
+            $table->string('msg');
+        });
+    }
+};
+EOF
+( cd "$B2" && git add -A && git -c user.name=t -c user.email=t@t commit -q -m regress )
+for s in models controllers; do bash "$M/$s.sh" $RT be >/dev/null 2>&1; done
+TX() { J be/controllers.json ".controllers[] | select(.fqcn | test(\"TxController\")) | .methods[] | select(.name == \"$1\") | .tables | join(\",\")"; }
+expect_eq "controllers: DB::beginTransaction() / ->getReport() add no table" "$(TX a)" ""
+expect_eq "controllers: Report::all() still gives its table" "$(TX b)" "reports"
+expect_eq "controllers: Transaction::where() still gives its table" "$(TX c)" "transactions"
+expect_eq "models: Schema::connection()->table adds columns" "$(J be/models.json '.tables[] | select(.name=="users") | .columns | map(.name) | join(",")')" "created_at,id,name,phone,updated_at"
+expect_eq "models: Schema::connection()->create is a create (a table name holding 'create' is not)" "$(J be/models.json '.tables[] | select(.name=="created_logs") | "\(.created_in_migrations)|\(.columns | map(.name) | join(","))"')" "true|msg"
+# a Frontend controller method with no web route that no code calls is dead code;
+# one with no route that live code calls ($this->helper()) is not
+cat > "$F2/app/Http/Controllers/OldController.php" <<'EOF'
+<?php
+namespace App\Http\Controllers;
+class OldController extends Controller
+{
+    public function old() { $backendUrl = config('app.backend_url'); return Http::asJson()->post("$backendUrl/otp/send", []); }
+    public function page() { return $this->helper(); }
+    public function helper() { $backendUrl = config('app.backend_url'); return Http::asJson()->get("$backendUrl/ping"); }
+}
+EOF
+# a route NAME equal to the method name is not a call to the method
+printf '<a href="{{ route('"'"'old'"'"') }}">old</a>\n' > "$F2/resources/views/auth/old_link.blade.php"
+cat >> "$F2/routes/web.php" <<'EOF'
+// Route::post('/old', [App\Http\Controllers\OldController::class, 'old']);
+Route::get('/old-page', [App\Http\Controllers\OldController::class, 'page']);
+EOF
+( cd "$F2" && git add -A && git -c user.name=t -c user.email=t@t commit -q -m dead )
+for s in routes controllers screens calls; do bash "$M/$s.sh" $RT fe >/dev/null 2>&1; done
+LA3=$(bash "$M/link-apis.sh" $RT 2>&1)
+DEAD() { J fe/api-links.json ".links[] | select(.caller == \"$1\") | \"\\(.dead)|\\(.pages_unresolved | map(.reason) | join(\";\"))\""; }
+expect_eq "link-apis: method whose route is commented out is dead code" "$(DEAD OldController@old)" "true|dead code: controller method has no web route and no code calls it"
+expect_eq "link-apis: unrouted helper called by live code is not dead" "$(DEAD OldController@helper)" "false|controller method has no web route"
+expect_contains "link-apis: dead calls counted in the summary" "$(printf '%s\n' "$LA3" | grep '^link-apis: fe:')" "1 from dead code"
+bash "$M/module-facts.sh" $RT auth >/dev/null 2>&1
+expect_eq "module-facts: dead calls are left out of the fact pack" "$(/usr/bin/jq -r '[.api_calls[] | select(.caller == "OldController@old")] | length' "$W2/atreya-docs/_map/_modules/auth/facts.json")" "0"
+# flow: an external box cites where its target is defined (the GoRoute line)
+GL=$(J ap/screens.json '.go_routes[] | select(.path == "/home") | .line')
+expect_eq "flow: external box cites the router line of its target" "$(DS flow --platform app | /usr/bin/jq -r '.nodes[] | select(.id == "x-homescreen") | .source')" "ap:lib/route/router.dart:$GL"
+# check-doc: every part of a "; "-separated source is checked
+/usr/bin/jq '.nodes[1].source = "be:routes/api.php:5; be:routes/api.php:999"' "$DD/seq-AUTH-R01.spec.json" > "$W/multisrc.json"; bash "$M/drawio.sh" "$W/multisrc.json" "$W/multisrc.drawio" >/dev/null
+expect_contains "check-doc: each citation of a multi-citation source is checked" "$(bash "$M/check-doc.sh" $RT "$W/multisrc.drawio" 2>&1)" "be:routes/api.php:999 (file has"
 
 printf '\n%d passed, %d failed\n' "$PASSN" "$FAILN"
 [ $FAILN = 0 ]
